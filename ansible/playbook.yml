@@ -1,0 +1,523 @@
+- name: Availability Test and general bootstrapping
+  tags:
+    - skip-deleteme
+  hosts: ionos_vpngate_2
+  become: true
+  gather_facts: false
+  roles:
+    - robertdebock.bootstrap
+
+- name: Install and update apt
+  tags:
+    - skip-deleteme
+  hosts: ionos_vpngate_2
+  become: true
+  gather_facts: true
+  roles:
+    - oefenweb.apt
+  vars:
+    apt_etc_apt_apt_conf:
+      - |
+        APT {
+          Install-Recommends "true";
+          Install-Suggests "false";
+          Get {
+            Fix-Broken "true";
+          };
+        };
+    apt_remove:
+      - vim # replace vim with neaovim
+    apt_install:
+      - neovim
+      - python3-pip
+      - net-tools
+      - bind9-dnsutils
+      - htop
+      - git # for certbot install (git actually did not work, it seems)
+      - cron # for certbot reload
+
+- name: Install DNSCrypt Proxy
+  tags:
+    - skip-deleteme
+  hosts: ionos_vpngate_2
+  become: true
+  gather_facts: true
+  roles:
+    - juju4.dnscryptproxy
+  vars:
+    # TODO: use the dnscryptproxyv2_listen variable, currently it does not work
+    dnscryptproxyv2_listen: "{{ inv_dnscryptproxyv2_listen_bracketed }}"
+
+- name: Install Certbot and the certificates
+  tags:
+    - skip-deleteme
+  hosts: ionos_vpngate_2
+  become: true
+  gather_facts: true
+  roles:
+    - geerlingguy.certbot
+  vars:
+    # certbot settings
+    certbot_admin_email: "{{ inv_certbot_admin_email }}"
+    certbot_create_if_missing: true
+    certbot_create_standalone_stop_services:
+      - adguard
+    certbot_certs:
+      - domains:
+          - "{{ inv_adguard_fqdn }}"
+    certbot_create_method: standalone
+    certbot_auto_renew_user: adguard
+    certbot_auto_renew: true
+    # TODO: starting in certbot test mode
+    # certbot_testmode: true
+
+- name: Install Adguard and set it up
+  hosts: ionos_vpngate_2
+  become: true
+  gather_facts: true
+  roles:
+    - onkeldom.adguard_home # we have to use the master branch, not the release!
+  pre_tasks:
+    # adguard currently does not have the permission to read the certificates, because they are owned by root:root
+    # TODO: check, if this chown breaks when performing a certificate change
+    - name: Chown /etc/letsencrypt/live/ to adguard
+      ansible.builtin.file:
+        path: /etc/letsencrypt/live
+        owner: adguard
+        group: adguard
+        recurse: true
+        state: directory
+
+    - name: Chown /etc/letsencrypt/archive to adguard
+      ansible.builtin.file:
+        path: /etc/letsencrypt/archive
+        owner: adguard
+        group: adguard
+        recurse: true
+        state: directory
+  vars:
+    # adguard settings
+    schema_version: 28
+    adguard_version: latest
+    adguard_config:
+      users:
+        - name: "{{ ADGUARD_ADMIN_USER_NAME }}"
+          password: "{{ ADGUARD_ADMIN_BCRYPT_PASSWORD }}"
+      auth_attempts: 3
+      block_auth_min: 240
+      dns:
+        #
+        # general DNS settings
+        #
+        bind_hosts: ["::"]
+        port: 5553
+        #
+        # rate limiting block # TODO: check, if rate limiting works at all
+        #
+        ratelimit: 20 # ratelimit below 20 seems to lock the user out of the gui, which seems to be affected by the rate limit
+        ratelimit_subnet_len_ipv4: 16 # block the whole /16 subnet, if more than 20 requests per second are produced
+        ratelimit_subnet_len_ipv6: 32 # only changed ipv6 subnet based blocking from 56 to 32
+        refuse_any: true
+        #
+        # upstream dns block
+        #
+        upstream_dns: [127.0.0.2, "https://dns10.quad9.net/dns-query"]
+        # bootstrap_dns: ---> keep defaults, they are ok
+        fallback_dns: [9.9.9.10, 1.1.1.1, 8.8.4.4]
+        # use_private_ptr_resolvers: [] -> empty array will throw errors
+        upstream_mode: load_balance
+        use_http3_upstreams: true
+        #
+        # EDNS settings
+        # Source subnet anonymization, try using the default settings
+        #
+        edns_cs_enabled: true # TODO: does not work
+        #  TODO: edns subnet and correction of edns yaml keys
+        #
+        # Access Settings
+        # Do not change anything from default
+        #
+        # blocked_hosts: []
+        #
+        # DNS cache settings
+        # Leave mostly at default
+        #
+        # cache_size:
+        # cache_ttl_min:
+        # cache_ttl_max:
+        cache_optimistic: true # keep serving expired entries with a ttl of 60 seconds, later 60 seconds, works at least according to the config
+        #
+        # Other Settings
+        # just look it up in the documentation https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration
+        #
+        enable_dnssec: true # DNSSEC, works
+        handle_ddr: true # Discovery of Designated Resolvers (some dnssec stuff) https://www.ietf.org/archive/id/draft-ietf-add-ddr-06.html
+        # TODO: try if it works, seems to crash adguard
+        resolve_clients: true # resolving clients' addresses by sending PTR requests # TODO: maybe already active per default, hence obsolete
+        serve_http3: true # http3 for dns requests and for queries to the front page
+        theme: auto # auto switch between bright and dark themes # TODO: try if it works
+        serve_plain_dns: false # disable insecure dns - the port is closed anyway # works # TODO: consider adding it again, if we run into dns issues
+      filtering:
+        protection_enabled: true
+        filtering_enabled: true
+        #
+        # Safe search
+        # Blocked Services
+        # Neither of them works, but we are overriding it anyway, because we don't want our changes to be destroyed by this yaml
+        #
+        safe_search: {enabled: false, bing: false, duckduckgo: false, google: false, pixabay: false, yandex: false, youtube: false}
+        blocked_services:
+          ids:
+            - betway
+            - betfair
+            - betano
+            - twitter
+            - twitch
+            - tiktok
+            - xboxlive
+            - playstation
+            - wechat
+            - onlyfans
+            - clubhouse
+            - facebook
+            - instagram
+            - zhihu
+            - xiaohongshu
+            - plenty_of_fish
+            - tinder
+            - iqiyi
+            - spotify
+            - skype
+            - riot_games
+            - plex
+            - pinterest
+            - blizzard_entertainment
+            - battle_net
+            - deezer
+            - rakuten_viki
+            - snapchat
+            - epic_games
+            - fifa
+            - wargaming
+      #
+      # Statistics Settings
+      # Does not work, will be overridden by api call, but we don't want it to trigger changes in the next run either
+      #
+      statistics:
+        enabled: true
+        interval: 7776000
+      filters:
+        - enabled: true
+          url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+          name: AdGuard DNS filter
+          id: 1
+        - enabled: true
+          url: https://adaway.org/hosts.txt
+          name: AdAway Default Blocklist
+          id: 2
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_23.txt
+        - enabled: true
+          url: https://threatfox.abuse.ch/downloads/hostfile/
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/abuse-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/ads-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/crypto-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/fraud-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/gambling-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/facebook-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/drugs-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/malware-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/phishing-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/piracy-ags.txt
+        - enabled: false
+          url: https://blocklistproject.github.io/Lists/adguard/porn-ags.txt
+        - enabled: false
+          url: https://blocklistproject.github.io/Lists/adguard/ransomware-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/redirect-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/scam-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/tiktok-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/torrent-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adguard/tracking-ags.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/smart-tv.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/vaping.txt
+        - enabled: true
+          url: https://blocklistproject.github.io/Lists/adobe.txt
+        - enabled: false
+          url: https://blocklistproject.github.io/Lists/adguard/everything-ags.txt
+        - enabled: false
+          url: https://easylist.to/easylist/easyprivacy.txt
+        - enabled: true
+          url: https://easylist.to/easylist/easylist.txt
+        - enabled: false
+          url: https://secure.fanboy.co.nz/fanboy-cookiemonster.txt
+        - enabled: true
+          url: https://easylist.to/easylist/fanboy-social.txt
+        - enabled: true
+          url: https://secure.fanboy.co.nz/fanboy-annoyance.txt
+        - enabled: true
+          url: https://easylist.to/easylistgermany/easylistgermany.txt
+        - enabled: true
+          url: https://easylist-downloads.adblockplus.org/easylist_noadult.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_29.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_30.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_8.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_21.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_18.txt
+        - enabled: true
+          url: https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+        - enabled: true
+          url: https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_6.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt
+        - enabled: true
+          url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_33.txt
+        - enabled: true
+          url: https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social-only/hosts
+        - enabled: true
+          url: https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-only/hosts
+        - enabled: true
+          url: https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&mimetype=plaintext
+      tls:
+        enabled: true
+        server_name: "{{ inv_adguard_fqdn }}"
+        port_https: 443
+        port_dns_over_tls: 853
+        port_dns_over_quic: 853
+        certificate_path: /etc/letsencrypt/live/{{ inv_adguard_fqdn }}/fullchain.pem
+        strict_sni_check: false
+        private_key_path: /etc/letsencrypt/live/{{ inv_adguard_fqdn }}/privkey.pem
+      log:
+        max_backups: 2
+        max_size: 10
+        # verbose: true  # verbose logging can be used for debugging
+  post_tasks:
+    # TODO: post tasks include predominantly api calls and also include the basic auth token rather perform them on localhost
+    - name: Restart adguard systemd service, because reloading will not suffice
+      ansible.builtin.systemd_service:
+        name: adguard
+        state: restarted
+    # TODO: possibly add wait job in here
+    - name: Disable safe search through the api because yaml does not work
+      ansible.builtin.uri:
+        url: https://{{ inv_adguard_fqdn }}/control/safesearch/disable
+        method: POST
+        headers:
+          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
+        follow_redirects: safe
+      register: result
+      retries: 10
+      delay: 10
+    - name: Update statistics retention to 90 days because yaml does not work
+      ansible.builtin.uri:
+        url: https://{{ inv_adguard_fqdn }}/control/stats/config/update
+        method: PUT
+        body:
+          enabled: true
+          interval: 7776000
+        body_format: json
+        headers:
+          Content-Type: application/json
+          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
+        follow_redirects: safe
+      register: result
+      retries: 10
+      delay: 10
+    - name: Define blocked services using the api because yaml does not work
+      ansible.builtin.uri:
+        url: https://{{ inv_adguard_fqdn }}/control/blocked_services/set
+        method: POST
+        body:
+          - betway
+          - betfair
+          - betano
+          - twitter
+          - twitch
+          - tiktok
+          - xboxlive
+          - playstation
+          - wechat
+          - onlyfans
+          - clubhouse
+          - facebook
+          - instagram
+          - zhihu
+          - xiaohongshu
+          - plenty_of_fish
+          - tinder
+          - iqiyi
+          - spotify
+          - skype
+          - riot_games
+          - plex
+          - pinterest
+          - blizzard_entertainment
+          - battle_net
+          - deezer
+          - rakuten_viki
+          - snapchat
+          - epic_games
+          - fifa
+          - wargaming
+        body_format: json
+        headers:
+          Content-Type: application/json
+          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
+        follow_redirects: safe
+      register: result
+      retries: 10
+      delay: 10
+    - name: Upload custom Filter Settings to Adguard
+      ansible.builtin.uri:
+        url: https://{{ inv_adguard_fqdn }}/control/filtering/set_rules
+        method: POST
+        body:
+          rules:
+            - "############################################################################################################"
+            - "###"
+            - "###             DO NOT EDIT THIS LIST, IT WILL BE OVERRIDDEN, CHANGE IT IN THE IAC REPOSITORY"
+            - "###"
+            - "### FK Adguard - Custom Blocklist Addendum"
+            - "###"
+            - "### Author:        FK"
+            - "### Created:       2023-11-29"
+            - "### Last changed:  2024-02-18 (at least thats the last time, this note was updated manually)"
+            - "###"
+            - "############################################################################################################"
+            - "###"
+            - "### Whitelists"
+            - "###"
+            - "############################################################################################################"
+            - "###"
+            - "### Whitelist, manually added"
+            - "### brought over from Opnsense Unbound config"
+            - "###"
+            - "############################################################################################################"
+            - "################################################"
+            - "# Oblivious Whitelist entries"
+            - "################################################"
+            - "@@||vidoza.net^"
+            - "@@||loverslab.com^"
+            - "################################################"
+            - "# Technical Whitelist entries"
+            - "################################################"
+            - "# Why again do we need ip2location ?!"
+            - "@@||ip2location.com^"
+            - "# Allow ipify tld yet only allow the subdomain api.ipify"
+            - "# TODO: maybe we have to sharpen this here, all subdomains for ipify are allowed"
+            - "@@||ipify.org"
+            - "@@||api.ipify.org^"
+            - "# TODO: Do we really have to whitelist all inwx subdomains or was that a dnssec issue"
+            - "# @@||inwx.com^"
+            - "############################################################################################################"
+            - "###"
+            - "### Whitelists from Pihole community"
+            - "### Source: https://discourse.pi-hole.net/t/commonly-whitelisted-domains/212"
+            - "###"
+            - "############################################################################################################"
+            - "################################################"
+            - "# Whatsapp"
+            - "################################################"
+            - "@@||wa.me^"
+            - "@@||www.wa.me^"
+            - "@@/^whatsapp-cdn-shv-[0-9]{2}-[a-z]{3}[0-9]\\.fbcdn\\.net$/$important"
+            - "@@/^((www|(w[0-9]\\.)?web|media((-[a-z]{3}|\\.[a-z]{4})[0-9]{1,2}-[0-9](\\.|-)(cdn|fna))?)\\.)?whatsapp\\.(com|net)$/$important"
+            - "################################################"
+            - "# Reddit"
+            - "################################################"
+            - "@@||styles.redditmedia.com^$important"
+            - "@@||www.redditstatic.com^$important"
+            - "@@||reddit.map.fastly.net^$important"
+            - "@@||www.redditmedia.com^$important"
+            - "@@||reddit-uploaded-media.s3-accelerate.amazonaws.com^$important"
+            - "@@||thumbs.redditmedia.com^$important"
+            - "@@||redd.it^$important"
+            - "@@||reddit.com^$important"
+            - "################################################"
+            - "# Linkedin"
+            - "################################################"
+            - "@@||linkedin.com^"
+            - "@@||www.linkedin.com^"
+            - "@@||licdn.com^"
+            - "################################################"
+            - "############################################################################################################"
+            - "###"
+            - "### Blacklists"
+            - "###"
+            - "############################################################################################################"
+            - "###"
+            - "### Blacklist, manually added"
+            - "### brought over from Opnsense Unbound config"
+            - "###"
+            - "############################################################################################################"
+            - "################################################"
+            - "# Technical Blacklist Entries"
+            - "################################################"
+            - "# bing edge services are also blocked by the WindowsSpyBlocker Extra list,"
+            - "# yet that list would also lead to onedrive and azure being blocked, hence we only block the major"
+            - "# sites. bing edge services is one of them."
+            - "||edgeservices.bing.com^"
+            - "#||vortex.data.microsoft.com^ --> AdGuard DNS Filter"
+            - "#||mobile.pipe.aria.microsoft.com --> WindowsSpyBlocker"
+            - "################################################"
+            - "# TODO: manual blacklist - unsure entries, maybe we have tounblock them"
+            - "################################################"
+            - "#Microsoft Appstore Tracking?!"
+            - "||in.appcenter.ms^"
+            - "# Could be yandex.ru mail gateway, yet it induces heavy loads"
+            - "||mx.yandex.ru^"
+            - "# Alibaba DNS and subdomains load some strange stuff like advertisments and probably tracking"
+            - "# on AliExpress. Yet this could lead to Alibabacloud being blocked."
+            - "# Edit 2023-12-03: It lead to aliexpress being blocked as whole."
+            - "#||gds.alibabadns.com^"
+            - "# Taobao is useless outside of china, we probably dont need it. The ut subdomain is used to load ads."
+            - "# We may have to sharpen this. But probably not, since it is most likely useless chinese advertisements."
+            - "||ut.taobao.com^"
+            - "||taobao.com^"
+            - "############################################################################################################"
+            - "###"
+            - "### End of maintained entries"
+            - "### Below this comment, the lines which were added on the fly using the gui are listed."
+            - "###"
+            - "############################################################################################################"
+            - "@@||s.click.aliexpress.com^$important"
+            - "@@||wireless.wiki.kernel.org^$important"
+            - "@@||gamepass.com^$important"
+            - "||confluence.ea.com^$important"
+            - "@@||archive.org^$important"
+            - ""
+        body_format: json
+        headers:
+          Content-Type: application/json
+          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
+        follow_redirects: safe
+      register: result
+      retries: 10
+      delay: 15

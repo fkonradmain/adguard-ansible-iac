@@ -1,0 +1,13 @@
+node_modules
+.venv
+ansible/roles.galaxy
+ansible/collections
+ansible/galaxy_cache
+snippets
+ansible/tmp
+/ansible/.default_vault_pass.txt
+OLD_NOTES.txt
+ansible/inventory/inventory.yml
+.vscode/settings.json
+ansible/galaxy_token
+ansible/inventory/group_vars/ionosgates.yml
