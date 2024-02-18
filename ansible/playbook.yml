@@ -1,6 +1,6 @@
 - name: Availability Test and general bootstrapping
   tags:
-    - skip-deleteme
+    - skip-deleteme # TODO: remove the "skip-deleteme" Tags
   hosts: ionos_vpngate_2
   become: true
   gather_facts: false
@@ -121,9 +121,10 @@
         #
         # upstream dns block
         #
-        upstream_dns: [127.0.0.2, "https://dns10.quad9.net/dns-query"]
+        upstream_dns: [127.0.0.2]
         # bootstrap_dns: ---> keep defaults, they are ok
-        fallback_dns: [9.9.9.10, 1.1.1.1, 8.8.4.4]
+        # prettier-ignore
+        fallback_dns: ["https://dns10.quad9.net/dns-query", 9.9.9.10, 1.1.1.1, 8.8.4.4]
         # use_private_ptr_resolvers: [] -> empty array will throw errors
         upstream_mode: load_balance
         use_http3_upstreams: true
@@ -165,6 +166,7 @@
         # Blocked Services
         # Neither of them works, but we are overriding it anyway, because we don't want our changes to be destroyed by this yaml
         #
+        # prettier-ignore
         safe_search: {enabled: false, bing: false, duckduckgo: false, google: false, pixabay: false, yandex: false, youtube: false}
         blocked_services:
           ids:
