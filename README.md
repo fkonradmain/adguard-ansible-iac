@@ -1,8 +1,8 @@
-# Ionos-Vpngate-2
+# Adguard-Ansible-IAC
 
 This machine was bought on ionos at 2024-02-02.
 
-## Core Data
+## Core Data of the current Instance
 
 Validity: 1 Year
 Location: USA
