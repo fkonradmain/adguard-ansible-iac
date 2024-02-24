@@ -225,7 +225,7 @@
       #
       statistics:
         enabled: true
-        interval: 7776000
+        interval: 7776000000
       filters:
         - enabled: true
           url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
@@ -361,7 +361,7 @@
         method: PUT
         body:
           enabled: true
-          interval: 7776000
+          interval: 7776000000
         body_format: json
         headers:
           Content-Type: application/json
