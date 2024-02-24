@@ -1,15 +1,21 @@
 - name: Availability Test and general bootstrapping
-  tags:
-    - skip-deleteme # TODO: remove the "skip-deleteme" Tags
   hosts: ionos_vpngate_2
   become: true
   gather_facts: false
   roles:
     - robertdebock.bootstrap
 
+- name: Set up a swap on the server
+  hosts: ionos_vpngate_2
+  become: true
+  gather_facts: true
+  roles:
+    - geerlingguy.swap
+  vars:
+    swap_file_size_mb: "{{ SWAP_FILE_SIZE_MB }}"
+    swap_swappiness: "{{ SWAP_SWAPPINESS }}"
+
 - name: Install and update apt
-  tags:
-    - skip-deleteme
   hosts: ionos_vpngate_2
   become: true
   gather_facts: true
@@ -36,10 +42,19 @@
       - git # for certbot install (git actually did not work, it seems)
       - cron # for certbot reload
 
-- name: Install DNSCrypt Proxy
-  tags:
-    - skip-deleteme
+- name: Install Tailscale on the server
   hosts: ionos_vpngate_2
+  become: true
+  gather_facts: true
+  roles:
+    - artis3n.tailscale
+  vars:
+    tailscale_authkey: "{{ TAILSCALE_AUTHKEY }}"
+    tailscale_args: "--advertise-exit-node --hostname={{ inv_adguard_fqdn }} --ssh"
+
+- name: Install DNSCrypt Proxy
+  hosts: ionos_vpngate_2
+
   become: true
   gather_facts: true
   roles:
@@ -49,8 +64,6 @@
     dnscryptproxyv2_listen: "{{ inv_dnscryptproxyv2_listen_bracketed }}"
 
 - name: Install Certbot and the certificates
-  tags:
-    - skip-deleteme
   hosts: ionos_vpngate_2
   become: true
   gather_facts: true
@@ -99,6 +112,11 @@
     # adguard settings
     schema_version: 28
     adguard_version: latest
+    adguard_limit_nofile: 1024
+    adguard_limit_memlock: 700M
+    adguard_memory_high: 600M
+    adguard_memory_max: 700M
+    adguard_cpu_quota: 80%
     adguard_config:
       users:
         - name: "{{ ADGUARD_ADMIN_USER_NAME }}"
