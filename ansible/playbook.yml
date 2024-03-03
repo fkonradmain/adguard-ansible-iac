@@ -110,14 +110,17 @@
         state: directory
   vars:
     # adguard settings
-    schema_version: 28
-    adguard_version: latest
+    adguard_version: latest # 0.108.0-b.53 # latest does work, maybe master works as well, we have to skip the "v" though
+    adguard_system_user: adguard
+    adguard_system_group: adguard
+    adguard_hostname: "{{ inv_adguard_fqdn }}"
     adguard_limit_nofile: 1024
     adguard_limit_memlock: 700M
     adguard_memory_high: 600M
     adguard_memory_max: 700M
     adguard_cpu_quota: 80%
     adguard_config:
+      schema_version: 28
       users:
         - name: "{{ ADGUARD_ADMIN_USER_NAME }}"
           password: "{{ ADGUARD_ADMIN_BCRYPT_PASSWORD }}"
@@ -143,7 +146,7 @@
         # bootstrap_dns: ---> keep defaults, they are ok
         # prettier-ignore
         fallback_dns: ["https://dns10.quad9.net/dns-query", 9.9.9.10, 1.1.1.1, 8.8.4.4]
-        # use_private_ptr_resolvers: [] -> empty array will throw errors
+        use_private_ptr_resolvers: false
         upstream_mode: load_balance
         use_http3_upstreams: true
         #
@@ -186,11 +189,14 @@
         #
         # prettier-ignore
         safe_search: {enabled: false, bing: false, duckduckgo: false, google: false, pixabay: false, yandex: false, youtube: false}
+        safebrowsing_enabled: true
         blocked_services:
           ids:
             - betway
             - betfair
             - betano
+            - bilibili
+            - claro
             - twitter
             - twitch
             - tiktok
@@ -225,7 +231,7 @@
       #
       statistics:
         enabled: true
-        interval: 7776000000
+        interval: 7776000s # 7776000000
       filters:
         - enabled: true
           url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
@@ -235,7 +241,23 @@
           url: https://adaway.org/hosts.txt
           name: AdAway Default Blocklist
           id: 2
+          # TODO: some blocklists were set to false because they may be too long, which would break the system
         - enabled: true
+          url: https://raw.githubusercontent.com/Perflyst/PiHoleBlocklist/master/SmartTV-AGH.txt
+          name: Perflyst and Dandelion Sprout's Smart-TV Blocklist
+        - enabled: true
+          url: https://raw.githubusercontent.com/mitchellkrogza/The-Big-List-of-Hacked-Malware-Web-Sites/master/hosts
+          name: The Big List of Hacked Malware Web Sites
+        - enabled: false
+          url: https://raw.githubusercontent.com/durablenapkin/scamblocklist/master/adguard.txt
+          name: Scam Blocklist by DurableNapkin
+        - enabled: false
+          url: https://paulgb.github.io/BarbBlock/blacklists/hosts-file.txt
+          name: BarbBlock
+        - enabled: false
+          url: https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt
+          name: WindowsSpyBlocker - Hosts spy rules
+        - enabled: false
           url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
         - enabled: true
           url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
@@ -327,16 +349,140 @@
           url: https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&mimetype=plaintext
       tls:
         enabled: true
-        server_name: "{{ inv_adguard_fqdn }}"
+        #server_name: "{{ inv_adguard_fqdn }}"
         port_https: 443
         port_dns_over_tls: 853
         port_dns_over_quic: 853
         certificate_path: /etc/letsencrypt/live/{{ inv_adguard_fqdn }}/fullchain.pem
+        # TODO: check, if we might use strict_sni_check
         strict_sni_check: false
         private_key_path: /etc/letsencrypt/live/{{ inv_adguard_fqdn }}/privkey.pem
+        icmp_timeout_msec: 1000
+      user_rules:
+        - "############################################################################################################"
+        - "###"
+        - "###             DO NOT EDIT THIS LIST, IT WILL BE OVERRIDDEN, CHANGE IT IN THE IAC REPOSITORY"
+        - "###"
+        - "### FK Adguard - Custom Blocklist Addendum"
+        - "###"
+        - "### Author:        FK"
+        - "### Created:       2023-11-29"
+        - "### Last changed:  2024-02-18 (at least thats the last time, this note was updated manually)"
+        - "###"
+        - "############################################################################################################"
+        - "###"
+        - "### Whitelists"
+        - "###"
+        - "############################################################################################################"
+        - "###"
+        - "### Whitelist, manually added"
+        - "### brought over from Opnsense Unbound config"
+        - "###"
+        - "############################################################################################################"
+        - "################################################"
+        - "# Oblivious Whitelist entries"
+        - "################################################"
+        - "@@||vidoza.net^"
+        - "@@||loverslab.com^"
+        - "################################################"
+        - "# Technical Whitelist entries"
+        - "################################################"
+        - "# Why again do we need ip2location ?!"
+        - "@@||ip2location.com^"
+        - "# Allow ipify tld yet only allow the subdomain api.ipify"
+        - "# TODO: maybe we have to sharpen this here, all subdomains for ipify are allowed"
+        - "@@||ipify.org"
+        - "@@||api.ipify.org^"
+        - "# TODO: Do we really have to whitelist all inwx subdomains or was that a dnssec issue"
+        - "# @@||inwx.com^"
+        - "############################################################################################################"
+        - "###"
+        - "### Whitelists from Pihole community"
+        - "### Source: https://discourse.pi-hole.net/t/commonly-whitelisted-domains/212"
+        - "###"
+        - "############################################################################################################"
+        - "################################################"
+        - "# Whatsapp"
+        - "################################################"
+        - "@@||wa.me^"
+        - "@@||www.wa.me^"
+        - "@@/^whatsapp-cdn-shv-[0-9]{2}-[a-z]{3}[0-9]\\.fbcdn\\.net$/$important"
+        - "@@/^((www|(w[0-9]\\.)?web|media((-[a-z]{3}|\\.[a-z]{4})[0-9]{1,2}-[0-9](\\.|-)(cdn|fna))?)\\.)?whatsapp\\.(com|net)$/$important"
+        - "################################################"
+        - "# Reddit"
+        - "################################################"
+        - "@@||styles.redditmedia.com^$important"
+        - "@@||www.redditstatic.com^$important"
+        - "@@||reddit.map.fastly.net^$important"
+        - "@@||www.redditmedia.com^$important"
+        - "@@||reddit-uploaded-media.s3-accelerate.amazonaws.com^$important"
+        - "@@||thumbs.redditmedia.com^$important"
+        - "@@||redd.it^$important"
+        - "@@||reddit.com^$important"
+        - "################################################"
+        - "# Linkedin"
+        - "################################################"
+        - "@@||linkedin.com^"
+        - "@@||www.linkedin.com^"
+        - "@@||licdn.com^"
+        - "################################################"
+        - "############################################################################################################"
+        - "###"
+        - "### Blacklists"
+        - "###"
+        - "############################################################################################################"
+        - "###"
+        - "### Blacklist, manually added"
+        - "### brought over from Opnsense Unbound config"
+        - "###"
+        - "############################################################################################################"
+        - "################################################"
+        - "# Manually blacklisted sites"
+        - "################################################"
+        - "# from Apple only block Apple Music"
+        - "||applemusic.apple^"
+        - "||music.apple.com^"
+        - "################################################"
+        - "# Technical Blacklist Entries"
+        - "################################################"
+        - "# bing edge services are also blocked by the WindowsSpyBlocker Extra list,"
+        - "# yet that list would also lead to onedrive and azure being blocked, hence we only block the major"
+        - "# sites. bing edge services is one of them."
+        - "||edgeservices.bing.com^"
+        - "#||vortex.data.microsoft.com^ --> AdGuard DNS Filter"
+        - "#||mobile.pipe.aria.microsoft.com --> WindowsSpyBlocker"
+        - "################################################"
+        - "# TODO: manual blacklist - unsure entries, maybe we have tounblock them"
+        - "################################################"
+        - "#Microsoft Appstore Tracking?!"
+        - "||in.appcenter.ms^"
+        - "# Could be yandex.ru mail gateway, yet it induces heavy loads"
+        - "||mx.yandex.ru^"
+        - "# Alibaba DNS and subdomains load some strange stuff like advertisments and probably tracking"
+        - "# on AliExpress. Yet this could lead to Alibabacloud being blocked."
+        - "# Edit 2023-12-03: It lead to aliexpress being blocked as whole."
+        - "#||gds.alibabadns.com^"
+        - "# Taobao is useless outside of china, we probably dont need it. The ut subdomain is used to load ads."
+        - "# We may have to sharpen this. But probably not, since it is most likely useless chinese advertisements."
+        - "||ut.taobao.com^"
+        - "||taobao.com^"
+        - "############################################################################################################"
+        - "###"
+        - "### End of maintained entries"
+        - "### Below this comment, the lines which were added on the fly using the gui are listed."
+        - "###"
+        - "############################################################################################################"
+        - "@@||s.click.aliexpress.com^$important"
+        - "@@||wireless.wiki.kernel.org^$important"
+        - "@@||gamepass.com^$important"
+        - "||confluence.ea.com^$important"
+        - "@@||archive.org^$important"
+        - ""
       log:
+        compress: true
         max_backups: 2
         max_size: 10
+        max_age: 90
         # verbose: true  # verbose logging can be used for debugging
   post_tasks:
     # TODO: post tasks include predominantly api calls and also include the basic auth token rather perform them on localhost
@@ -344,200 +490,3 @@
       ansible.builtin.systemd_service:
         name: adguard
         state: restarted
-    # TODO: possibly add wait job in here
-    - name: Disable safe search through the api because yaml does not work
-      ansible.builtin.uri:
-        url: https://{{ inv_adguard_fqdn }}/control/safesearch/disable
-        method: POST
-        headers:
-          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
-        follow_redirects: safe
-      register: result
-      retries: 10
-      delay: 10
-    - name: Update statistics retention to 90 days because yaml does not work
-      ansible.builtin.uri:
-        url: https://{{ inv_adguard_fqdn }}/control/stats/config/update
-        method: PUT
-        body:
-          enabled: true
-          interval: 7776000000
-        body_format: json
-        headers:
-          Content-Type: application/json
-          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
-        follow_redirects: safe
-      register: result
-      retries: 10
-      delay: 10
-    - name: Define blocked services using the api because yaml does not work
-      ansible.builtin.uri:
-        url: https://{{ inv_adguard_fqdn }}/control/blocked_services/set
-        method: POST
-        body:
-          - betway
-          - betfair
-          - betano
-          - twitter
-          - twitch
-          - tiktok
-          - xboxlive
-          - playstation
-          - wechat
-          - onlyfans
-          - clubhouse
-          - facebook
-          - instagram
-          - zhihu
-          - xiaohongshu
-          - plenty_of_fish
-          - tinder
-          - iqiyi
-          - spotify
-          - skype
-          - riot_games
-          - plex
-          - pinterest
-          - blizzard_entertainment
-          - battle_net
-          - deezer
-          - rakuten_viki
-          - snapchat
-          - epic_games
-          - fifa
-          - wargaming
-        body_format: json
-        headers:
-          Content-Type: application/json
-          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
-        follow_redirects: safe
-      register: result
-      retries: 10
-      delay: 10
-    - name: Upload custom Filter Settings to Adguard
-      ansible.builtin.uri:
-        url: https://{{ inv_adguard_fqdn }}/control/filtering/set_rules
-        method: POST
-        body:
-          rules:
-            - "############################################################################################################"
-            - "###"
-            - "###             DO NOT EDIT THIS LIST, IT WILL BE OVERRIDDEN, CHANGE IT IN THE IAC REPOSITORY"
-            - "###"
-            - "### FK Adguard - Custom Blocklist Addendum"
-            - "###"
-            - "### Author:        FK"
-            - "### Created:       2023-11-29"
-            - "### Last changed:  2024-02-18 (at least thats the last time, this note was updated manually)"
-            - "###"
-            - "############################################################################################################"
-            - "###"
-            - "### Whitelists"
-            - "###"
-            - "############################################################################################################"
-            - "###"
-            - "### Whitelist, manually added"
-            - "### brought over from Opnsense Unbound config"
-            - "###"
-            - "############################################################################################################"
-            - "################################################"
-            - "# Oblivious Whitelist entries"
-            - "################################################"
-            - "@@||vidoza.net^"
-            - "@@||loverslab.com^"
-            - "################################################"
-            - "# Technical Whitelist entries"
-            - "################################################"
-            - "# Why again do we need ip2location ?!"
-            - "@@||ip2location.com^"
-            - "# Allow ipify tld yet only allow the subdomain api.ipify"
-            - "# TODO: maybe we have to sharpen this here, all subdomains for ipify are allowed"
-            - "@@||ipify.org"
-            - "@@||api.ipify.org^"
-            - "# TODO: Do we really have to whitelist all inwx subdomains or was that a dnssec issue"
-            - "# @@||inwx.com^"
-            - "############################################################################################################"
-            - "###"
-            - "### Whitelists from Pihole community"
-            - "### Source: https://discourse.pi-hole.net/t/commonly-whitelisted-domains/212"
-            - "###"
-            - "############################################################################################################"
-            - "################################################"
-            - "# Whatsapp"
-            - "################################################"
-            - "@@||wa.me^"
-            - "@@||www.wa.me^"
-            - "@@/^whatsapp-cdn-shv-[0-9]{2}-[a-z]{3}[0-9]\\.fbcdn\\.net$/$important"
-            - "@@/^((www|(w[0-9]\\.)?web|media((-[a-z]{3}|\\.[a-z]{4})[0-9]{1,2}-[0-9](\\.|-)(cdn|fna))?)\\.)?whatsapp\\.(com|net)$/$important"
-            - "################################################"
-            - "# Reddit"
-            - "################################################"
-            - "@@||styles.redditmedia.com^$important"
-            - "@@||www.redditstatic.com^$important"
-            - "@@||reddit.map.fastly.net^$important"
-            - "@@||www.redditmedia.com^$important"
-            - "@@||reddit-uploaded-media.s3-accelerate.amazonaws.com^$important"
-            - "@@||thumbs.redditmedia.com^$important"
-            - "@@||redd.it^$important"
-            - "@@||reddit.com^$important"
-            - "################################################"
-            - "# Linkedin"
-            - "################################################"
-            - "@@||linkedin.com^"
-            - "@@||www.linkedin.com^"
-            - "@@||licdn.com^"
-            - "################################################"
-            - "############################################################################################################"
-            - "###"
-            - "### Blacklists"
-            - "###"
-            - "############################################################################################################"
-            - "###"
-            - "### Blacklist, manually added"
-            - "### brought over from Opnsense Unbound config"
-            - "###"
-            - "############################################################################################################"
-            - "################################################"
-            - "# Technical Blacklist Entries"
-            - "################################################"
-            - "# bing edge services are also blocked by the WindowsSpyBlocker Extra list,"
-            - "# yet that list would also lead to onedrive and azure being blocked, hence we only block the major"
-            - "# sites. bing edge services is one of them."
-            - "||edgeservices.bing.com^"
-            - "#||vortex.data.microsoft.com^ --> AdGuard DNS Filter"
-            - "#||mobile.pipe.aria.microsoft.com --> WindowsSpyBlocker"
-            - "################################################"
-            - "# TODO: manual blacklist - unsure entries, maybe we have tounblock them"
-            - "################################################"
-            - "#Microsoft Appstore Tracking?!"
-            - "||in.appcenter.ms^"
-            - "# Could be yandex.ru mail gateway, yet it induces heavy loads"
-            - "||mx.yandex.ru^"
-            - "# Alibaba DNS and subdomains load some strange stuff like advertisments and probably tracking"
-            - "# on AliExpress. Yet this could lead to Alibabacloud being blocked."
-            - "# Edit 2023-12-03: It lead to aliexpress being blocked as whole."
-            - "#||gds.alibabadns.com^"
-            - "# Taobao is useless outside of china, we probably dont need it. The ut subdomain is used to load ads."
-            - "# We may have to sharpen this. But probably not, since it is most likely useless chinese advertisements."
-            - "||ut.taobao.com^"
-            - "||taobao.com^"
-            - "############################################################################################################"
-            - "###"
-            - "### End of maintained entries"
-            - "### Below this comment, the lines which were added on the fly using the gui are listed."
-            - "###"
-            - "############################################################################################################"
-            - "@@||s.click.aliexpress.com^$important"
-            - "@@||wireless.wiki.kernel.org^$important"
-            - "@@||gamepass.com^$important"
-            - "||confluence.ea.com^$important"
-            - "@@||archive.org^$important"
-            - ""
-        body_format: json
-        headers:
-          Content-Type: application/json
-          Authorization: Basic {{ ADGUARD_ADMIN_BASIC_AUTH_TOKEN }}
-        follow_redirects: safe
-      register: result
-      retries: 10
-      delay: 15
