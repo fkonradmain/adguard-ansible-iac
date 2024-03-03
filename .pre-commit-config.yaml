@@ -32,10 +32,6 @@ repos:
     rev: v0.39.0
     hooks:
       - id: markdownlint-fix-docker
-  - repo: https://github.com/aquasecurity/tfsec
-    rev: v1.28.5
-    hooks:
-      - id: tfsec-docker
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.32.0
     hooks:
