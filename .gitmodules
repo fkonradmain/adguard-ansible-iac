@@ -1,0 +1,21 @@
+[submodule "ansible/roles/ansible-role-tailscale"]
+	path = ansible/roles/ansible-role-tailscale
+	url = https://github.com/artis3n/ansible-role-tailscale.git
+[submodule "ansible/roles/ansible-role-adguard-home"]
+	path = ansible/roles/ansible-role-adguard-home
+	url = https://github.com/fkonradmain/ansible-role-adguard-home.git
+[submodule "ansible/roles/ansible-role-swap"]
+	path = ansible/roles/ansible-role-swap
+	url = https://github.com/geerlingguy/ansible-role-swap.git
+[submodule "ansible/roles/ansible-dnscrypt-proxy"]
+	path = ansible/roles/ansible-dnscrypt-proxy
+	url = https://github.com/juju4/ansible-dnscrypt-proxy.git
+[submodule "ansible/roles/ansible-apt"]
+	path = ansible/roles/ansible-apt
+	url = https://github.com/Oefenweb/ansible-apt.git
+[submodule "ansible/roles/ansible-role-bootstrap"]
+	path = ansible/roles/ansible-role-bootstrap
+	url = https://github.com/robertdebock/ansible-role-bootstrap.git
+[submodule "ansible/roles/ansible-role-certbot"]
+	path = ansible/roles/ansible-role-certbot
+	url = https://github.com/geerlingguy/ansible-role-certbot.git
