@@ -21,12 +21,17 @@ cd to ansible/
 
 set up the key as the file ansible
 
-## Ansible Galaxy Modules
+## Git submodules
 
-The ansible galaxy modules will have to be installed manually.
-They can be found by looking through `ansible/playbook.yml`.
-As of 2024-02-18, all referenced roles will have to be pulled
-from ansible-galaxy.
+The ansible galaxy modules are present as git submodules
 
-Be aware: the onkeldom.adguard_home module must be
-the current master branch version, not the one on ansible.
+To automatically update the submodules to the latest tags avaiable, run:
+
+```bash
+git submodule foreach \
+'git fetch origin; git checkout $(git describe --tags `git rev-list --tags --max-count=1`);'
+```
+
+if you have custom changes to the submodules, you probably should not
+run that command because it will pull the latest tags and not the latest
+content of your branch or fork.
