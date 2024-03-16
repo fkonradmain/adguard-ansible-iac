@@ -13,7 +13,8 @@ exclude_paths:
   - test/fixtures/formatting-before/
   - test/fixtures/formatting-prettier/
   - collections/
-  - roles.galaxy/ # custom: do not lint imported roles
+  - roles.galaxy/
+  - roles/ # custom: do not lint imported roles
 # parseable: true
 # quiet: true
 # strict: true

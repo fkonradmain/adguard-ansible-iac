@@ -3,14 +3,14 @@
   become: true
   gather_facts: false
   roles:
-    - robertdebock.bootstrap
+    - ansible-role-bootstrap
 
 - name: Set up a swap on the server
   hosts: ionos_vpngate_2
   become: true
   gather_facts: true
   roles:
-    - geerlingguy.swap
+    - ansible-role-swap
   vars:
     swap_file_size_mb: "{{ inv_swap_file_size_mb }}"
     swap_swappiness: "{{ inv_swap_swappiness }}"
@@ -20,7 +20,7 @@
   become: true
   gather_facts: true
   roles:
-    - oefenweb.apt
+    - ansible-apt
   vars:
     apt_etc_apt_apt_conf:
       - |
@@ -47,7 +47,7 @@
   become: true
   gather_facts: true
   roles:
-    - artis3n.tailscale
+    - ansible-role-tailscale
   vars:
     tailscale_authkey: "{{ TAILSCALE_AUTHKEY }}"
     tailscale_args: --advertise-exit-node --hostname={{ inv_adguard_fqdn }} --ssh
@@ -96,11 +96,10 @@
 
 - name: Install DNSCrypt Proxy
   hosts: ionos_vpngate_2
-
   become: true
   gather_facts: true
   roles:
-    - juju4.dnscryptproxy
+    - ansible-dnscrypt-proxy
   vars:
     # TODO: use the dnscryptproxyv2_listen variable, currently it does not work
     dnscryptproxyv2_listen: "{{ inv_dnscryptproxyv2_listen_bracketed }}"
@@ -110,7 +109,7 @@
   become: true
   gather_facts: true
   roles:
-    - geerlingguy.certbot
+    - ansible-role-certbot
   vars:
     # certbot settings
     certbot_admin_email: "{{ inv_certbot_admin_email }}"
@@ -131,7 +130,7 @@
   become: true
   gather_facts: true
   roles:
-    - onkeldom.adguard_home # we have to use the master branch, not the release!
+    - ansible-role-adguard-home # we are using a highly customized version
   pre_tasks:
     # adguard currently does not have the permission to read the certificates, because they are owned by root:root
     # TODO: check, if this chown breaks when performing a certificate change
@@ -187,7 +186,7 @@
         upstream_dns: [127.0.0.2]
         # bootstrap_dns: ---> keep defaults, they are ok
         # prettier-ignore
-        fallback_dns: ["https://dns10.quad9.net/dns-query", 9.9.9.10, 1.1.1.1, 8.8.4.4]
+        fallback_dns: ['https://dns10.quad9.net/dns-query', 9.9.9.10, 1.1.1.1, 8.8.4.4]
         use_private_ptr_resolvers: false
         upstream_mode: load_balance
         use_http3_upstreams: true
@@ -215,6 +214,7 @@
         # just look it up in the documentation https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration
         #
         enable_dnssec: true # DNSSEC, works
+        max_goroutines: 300
         handle_ddr: true # Discovery of Designated Resolvers (some dnssec stuff) https://www.ietf.org/archive/id/draft-ietf-add-ddr-06.html
         # TODO: try if it works, seems to crash adguard
         resolve_clients: true # resolving clients' addresses by sending PTR requests # TODO: maybe already active per default, hence obsolete
